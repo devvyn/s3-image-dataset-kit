@@ -11,7 +11,7 @@ content-addressed keys, a JSONL manifest, and a read‑through cache client for 
 - **JSONL manifest** with bytes, content-type, optional width/height, optional logical IDs
 - **Read-through cache client** for random access workloads
 - Supports AWS S3 and S3‑compatible endpoints (MinIO, Cloudflare R2, DO Spaces, etc.)
-- Clean **uv-managed** Python project; includes **Makefile** targets
+- Clean **uv-managed** Python project; includes **justfile** recipes
 
 ## Quick Start
 
@@ -41,16 +41,16 @@ Assuming your local images are under `./data/images`:
 
 ```bash
 # Dry-run manifest (no uploads) – write to ./manifests/inventory-v1.jsonl
-make manifest SRC_DIR=./data/images
+just manifest ./data/images
 
 # Upload to S3 (idempotent by hash)
-make upload SRC_DIR=./data/images
+just upload ./data/images
 ```
 
 ### 4) Random fetch demo (read-through cache)
 ```bash
 # Downloads to /tmp/imgcache by default, then prints local paths
-make random-fetch N=5
+just random-fetch 5
 ```
 
 ### 5) Optional: mount as a filesystem (read-only)
@@ -93,12 +93,12 @@ docker build -t dataset-client .
 docker run --rm -it   --env-file .env   -v /tmp/imgcache:/tmp/imgcache   dataset-client   python -m dataset_tool.scripts.random_fetch --n 3
 ```
 
-## Make Targets
-- `make setup` – uv sync
-- `make manifest SRC_DIR=./data/images` – compute hashes, build manifest only
-- `make upload SRC_DIR=./data/images` – upload images + manifest to S3
-- `make validate` – validate manifest against JSON Schema
-- `make random-fetch N=5` – sample random images via read-through cache
+## Just Recipes
+- `just setup` – uv sync
+- `just manifest ./data/images` – compute hashes, build manifest only
+- `just upload ./data/images` – upload images + manifest to S3
+- `just validate` – validate manifest against JSON Schema
+- `just random-fetch 5` – sample random images via read-through cache
 
 ## Notes
 - Width/height require Pillow; if not installed, they are omitted.
