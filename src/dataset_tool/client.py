@@ -21,6 +21,7 @@ def fetch_entry(entry: Dict) -> Path:
     dst = _cache_path(sha, ext)
     if dst.exists():
         return dst
+    bucket = SETTINGS.require_bucket()
     s3 = s3_client()
-    s3.download_file(SETTINGS.bucket, key, str(dst))
+    s3.download_file(bucket, key, str(dst))
     return dst
