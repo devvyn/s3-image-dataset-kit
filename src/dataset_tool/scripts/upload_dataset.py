@@ -7,7 +7,7 @@ import os
 from tqdm import tqdm
 
 from dataset_tool.config import SETTINGS
-from dataset_tool.manifest import read_jsonl
+from dataset_tool.manifest import ManifestEntry, read_jsonl
 from dataset_tool.uploader import upload_file, upload_manifest
 
 
@@ -28,15 +28,17 @@ def main():
     ap.add_argument("--manifest", required=True, help="Local manifest to upload")
     args = ap.parse_args()
 
-    entries = read_jsonl(args.manifest)
+    entry_dicts = read_jsonl(args.manifest)
     sha_to_path = build_sha_to_local_map(args.src)
 
-    missing = [e for e in entries if e["sha256"] not in sha_to_path]
+    missing = [e for e in entry_dicts if e["sha256"] not in sha_to_path]
     if missing:
         raise SystemExit(f"{len(missing)} entries missing locally; ensure --src matches manifest")
 
-    for e in tqdm(entries, desc="Uploading files"):
-        upload_file(sha_to_path[e["sha256"]], e)
+    entries = [ManifestEntry(**e) for e in entry_dicts]
+
+    for entry in tqdm(entries, desc="Uploading files"):
+        upload_file(sha_to_path[entry.sha256], entry)
 
     upload_manifest(args.manifest)
     print(f"Uploaded manifest to s3://{SETTINGS.bucket}/{SETTINGS.manifest_key}")
