@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass
-from typing import Iterable, Optional
+from typing import Any, Iterable, Mapping, Optional
 
 
 @dataclass
@@ -25,3 +25,21 @@ def write_jsonl(entries: Iterable[ManifestEntry], out_path: str):
 def read_jsonl(path: str) -> list[dict]:
     with open(path, "r", encoding="utf-8") as f:
         return [json.loads(line) for line in f if line.strip()]
+
+
+def to_manifest_entry(record: ManifestEntry | Mapping[str, Any]) -> ManifestEntry:
+    """Normalize manifest records to :class:`ManifestEntry` instances."""
+
+    if isinstance(record, ManifestEntry):
+        return record
+
+    return ManifestEntry(
+        sha256=record["sha256"],
+        path=record["path"],
+        bytes=record["bytes"],
+        content_type=record.get("content_type", "image/jpeg"),
+        width=record.get("width"),
+        height=record.get("height"),
+        logical_id=record.get("logical_id"),
+        etag=record.get("etag"),
+    )
