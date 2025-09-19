@@ -45,7 +45,7 @@ def _maybe_dims(path: str) -> tuple[Optional[int], Optional[int]]:
     except Exception:
         return None, None
 
-def build_manifest(src_dir: str, logical_map: dict[str, str] | None = None):
+def build_manifest(src_dir: str, logical_map: dict[str, str] | None = None) -> list[ManifestEntry]:
     entries: list[ManifestEntry] = []
     for path in tqdm(iter_images(src_dir), desc="Hashing"):
         sha = sha256_file(path)
@@ -72,12 +72,12 @@ def build_manifest(src_dir: str, logical_map: dict[str, str] | None = None):
     return entries
 
 def build_sha_to_local_map(src_dir: str) -> dict[str, str]:
-    """Compute a mapping of SHA256 hash → local file path."""
+    """Compute a mapping of SHA256 hash → local file path with a progress indicator."""
 
     mapping: dict[str, str] = {}
-    for path in iter_images(src_dir):
+    for path in tqdm(iter_images(src_dir), desc="Indexing local files"):
         sha = sha256_file(path)
-        mapping[sha] = path
+        mapping.setdefault(sha, path)
     return mapping
 
 
@@ -94,13 +94,15 @@ def upload_entries(
     normalized entries with the latest known ETag populated (when available).
     """
 
+    bucket = SETTINGS.require_bucket()
+
+
     if sha_to_local is None:
         if not src_dir:
             raise ValueError("upload_entries requires src_dir or sha_to_local mapping")
         sha_to_local = build_sha_to_local_map(src_dir)
 
-    bucket = SETTINGS.require_bucket()
-    s3 = s3_client()
+    s3 = s3 or s3_client()
 
     uploaded: list[ManifestEntry] = []
 
@@ -148,9 +150,11 @@ def write_manifest(entries: list[ManifestEntry], out_path: str):
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     write_jsonl(entries, out_path)
 
-def upload_manifest(local_manifest_path: str):
-    bucket = SETTINGS.require_bucket()
-    s3 = s3_client()
+def upload_manifest(local_manifest_path: str, *, s3=None, bucket: str | None = None):
+    if bucket is None:
+        bucket = SETTINGS.require_bucket()
+    if s3 is None:
+        s3 = s3_client()
     with open(local_manifest_path, "rb") as f:
         s3.put_object(
             Bucket=bucket,
