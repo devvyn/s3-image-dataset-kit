@@ -51,12 +51,13 @@ validate manifest_path:
     uv run python -m {{PKG_IMPORT}}.scripts.validate_manifest \
         --manifest "{{manifest_path}}"
 
-# Upload using your script (adjust flags to your s3 target)
-upload manifest_path bucket:
+# Upload objects & manifest to the bucket configured via S3_BUCKET
+# usage: just upload /path/to/images ./manifests/inventory-v1.jsonl
+upload src_dir manifest_path:
     just dev
     uv run python -m {{PKG_IMPORT}}.scripts.upload_dataset \
-        --manifest "{{manifest_path}}" \
-        --bucket "{{bucket}}"
+        --src "{{src_dir}}" \
+        --manifest "{{manifest_path}}"
 
 # Clean the env (optional)
 clean:

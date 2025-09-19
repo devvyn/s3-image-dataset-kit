@@ -86,6 +86,7 @@ def upload_entries(
     *,
     src_dir: str | None = None,
     sha_to_local: Mapping[str, str] | None = None,
+    s3: Any | None = None,
 ) -> list[ManifestEntry]:
     """Upload manifest entries using a local SHA→path mapping.
 
@@ -102,7 +103,8 @@ def upload_entries(
             raise ValueError("upload_entries requires src_dir or sha_to_local mapping")
         sha_to_local = build_sha_to_local_map(src_dir)
 
-    s3 = s3 or s3_client()
+    if s3 is None:
+        s3 = s3_client()
 
     uploaded: list[ManifestEntry] = []
 

@@ -1,7 +1,7 @@
 
 [project]
 name = "s3-image-dataset-kit"
-version = "0.1.0"
+version = "0.2.0"
 description = "Immutable S3 image dataset toolkit with content-addressed uploads, JSONL manifest, and read-through cache client."
 requires-python = ">=3.10"
 dependencies = [
