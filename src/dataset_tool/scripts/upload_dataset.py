@@ -18,10 +18,11 @@ def main():
     ap.add_argument("--manifest", required=True, help="Local manifest to upload")
     args = ap.parse_args()
 
-    entries = read_jsonl(args.manifest)
+    raw_entries = read_jsonl(args.manifest)
+    entries = [to_manifest_entry(e) for e in raw_entries]
     sha_to_path = build_sha_to_local_map(args.src)
 
-    missing = [e for e in entries if e["sha256"] not in sha_to_path]
+    missing = [e for e in entries if e.sha256 not in sha_to_path]
     if missing:
         raise SystemExit(f"{len(missing)} entries missing locally; ensure --src matches manifest")
 

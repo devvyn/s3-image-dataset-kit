@@ -97,6 +97,7 @@ def upload_entries(
 
     bucket = SETTINGS.require_bucket()
 
+
     if sha_to_local is None:
         if not src_dir:
             raise ValueError("upload_entries requires src_dir or sha_to_local mapping")
