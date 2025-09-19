@@ -3,7 +3,7 @@ set shell := ["bash", "-uc"]
 
 # ---- Project knobs (edit if you renamed things) ----
 # Distribution name from [project].name in pyproject.toml
-PKG_DIST := "dataset-tool"
+PKG_DIST := "s3-image-dataset-kit"
 # Import/package name = folder under src/
 PKG_IMPORT := "dataset_tool"
 
