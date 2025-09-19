@@ -31,7 +31,7 @@ check:
     import {{PKG_IMPORT}} as mod
     print("import ok:", mod.__name__)
     print("dist ok:", m.version("{{PKG_DIST}}"))
-PY
+    PY
 
 # Meta recipe to do both: lockfile deps + editable install + quick check
 dev:
