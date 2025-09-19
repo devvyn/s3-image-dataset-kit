@@ -86,13 +86,12 @@ def upload_entries(
     *,
     src_dir: str | None = None,
     sha_to_local: Mapping[str, str] | None = None,
-    s3=None,
-):
+) -> list[ManifestEntry]:
     """Upload manifest entries using a local SHA→path mapping.
 
     Provide either ``src_dir`` (to derive a mapping) or ``sha_to_local``.
-    Objects already present in the bucket are skipped. Supply an existing
-    ``s3`` client to reuse connections across uploads.
+    Objects already present in the bucket are skipped. The returned list contains
+    normalized entries with the latest known ETag populated (when available).
     """
 
     bucket = SETTINGS.require_bucket()
@@ -105,6 +104,8 @@ def upload_entries(
 
     s3 = s3 or s3_client()
 
+    uploaded: list[ManifestEntry] = []
+
     for record in tqdm(entries, desc="Uploading"):
         entry = to_manifest_entry(record)
         local_path = sha_to_local.get(entry.sha256)
@@ -114,32 +115,36 @@ def upload_entries(
             )
 
         try:
-            s3.head_object(Bucket=bucket, Key=entry.path)
+            head = s3.head_object(Bucket=bucket, Key=entry.path)
         except ClientError as exc:
-            error = exc.response.get("Error", {})
-            if error.get("Code") not in {"404", "NoSuchKey", "NotFound"}:
+            error_code = exc.response.get("Error", {}).get("Code", "")
+            if error_code not in {"404", "NoSuchKey", "NotFound"}:
                 raise
         else:
+            entry.etag = head.get("ETag")
+            uploaded.append(entry)
             continue
 
-        upload_file(local_path, entry, bucket=bucket, s3=s3)
+        etag = upload_file(local_path, entry, bucket=bucket)
+        if etag:
+            entry.etag = etag
+        uploaded.append(entry)
 
-def upload_file(
-    local_path: str,
-    entry: ManifestEntry,
-    *,
-    bucket: str | None = None,
-    s3=None,
-):
+    return uploaded
+
+def upload_file(local_path: str, entry: ManifestEntry, *, bucket: str | None = None) -> str | None:
     if bucket is None:
         bucket = SETTINGS.require_bucket()
-    if s3 is None:
-        s3 = s3_client()
-    extra = {
-        "ContentType": entry.content_type,
-        "CacheControl": "public, max-age=31536000, immutable",
-    }
-    s3.upload_file(local_path, bucket, entry.path, ExtraArgs=extra)
+    s3 = s3_client()
+    with open(local_path, "rb") as f:
+        response = s3.put_object(
+            Bucket=bucket,
+            Key=entry.path,
+            Body=f,
+            ContentType=entry.content_type,
+            CacheControl="public, max-age=31536000, immutable"
+        )
+    return response.get("ETag")
 
 def write_manifest(entries: list[ManifestEntry], out_path: str):
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)

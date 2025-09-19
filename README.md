@@ -43,7 +43,7 @@ Assuming your local images are under `./data/images`:
 # Dry-run manifest (no uploads) – write to ./manifests/inventory-v1.jsonl
 just manifest ./data/images
 
-# Upload to S3 (idempotent by hash)
+# Upload to S3 (idempotent by hash, manifest gains S3 ETags)
 just upload ./data/images
 ```
 

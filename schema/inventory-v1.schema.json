@@ -38,5 +38,5 @@
     "bytes",
     "content_type"
   ],
-  "additionalProperties": true
+  "additionalProperties": false
 }

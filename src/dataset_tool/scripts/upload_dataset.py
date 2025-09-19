@@ -9,6 +9,7 @@ from dataset_tool.uploader import (
     build_sha_to_local_map,
     upload_entries,
     upload_manifest,
+    write_manifest,
 )
 
 
@@ -26,6 +27,10 @@ def main():
     if missing:
         raise SystemExit(f"{len(missing)} entries missing locally; ensure --src matches manifest")
 
+    uploaded_entries = upload_entries(entries, sha_to_local=sha_to_path)
+    write_manifest(uploaded_entries, args.manifest)
+
+    upload_manifest(args.manifest)
     bucket = SETTINGS.require_bucket()
     s3 = s3_client()
 
