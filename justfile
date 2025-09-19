@@ -26,12 +26,7 @@ reinstall:
 
 # 4) Smoke test: confirm both the import and the distribution are visible
 check:
-    uv run python - <<'PY'
-    from importlib import metadata as m
-    import {{PKG_IMPORT}} as mod
-    print("import ok:", mod.__name__)
-    print("dist ok:", m.version("{{PKG_DIST}}"))
-    PY
+    uv run python -c 'from importlib import metadata as m; import {{PKG_IMPORT}} as mod; print("import ok:", mod.__name__); print("dist ok:", m.version("{{PKG_DIST}}"))'
 
 # Meta recipe to do both: lockfile deps + editable install + quick check
 dev:
