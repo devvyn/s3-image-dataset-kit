@@ -9,7 +9,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 COPY pyproject.toml /app/
-RUN pip install uv && uv pip install -r <(uv pip compile pyproject.toml) --system
+RUN pip install uv \
+    && uv pip compile pyproject.toml --output-file requirements.txt \
+    && uv pip install -r requirements.txt --system \
+    && rm requirements.txt
 COPY src /app/src
 
 ENV PYTHONPATH=/app/src

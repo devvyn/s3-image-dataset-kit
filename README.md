@@ -90,7 +90,11 @@ You do **not** bake images into the container. This image only contains the clie
 docker build -t dataset-client .
 
 # Run demo (needs env for S3 + manifest access, and a cache volume)
-docker run --rm -it   --env-file .env   -v /tmp/imgcache:/tmp/imgcache   dataset-client   python -m dataset_tool.scripts.random_fetch --n 3
+docker run --rm -it \
+  --env-file .env \
+  -v /tmp/imgcache:/tmp/imgcache \
+  dataset-client \
+  python -m dataset_tool.scripts.random_fetch --n 3
 ```
 
 ## Just Recipes

@@ -1,26 +1,16 @@
-
 from __future__ import annotations
 
 import argparse
-import os
-
-from tqdm import tqdm
 
 from dataset_tool.config import SETTINGS
 from dataset_tool.manifest import read_jsonl
-from dataset_tool.uploader import upload_file, upload_manifest
+from dataset_tool.s3_client import s3_client
+from dataset_tool.uploader import (
+    build_sha_to_local_map,
+    upload_entries,
+    upload_manifest,
+)
 
-
-def build_sha_to_local_map(src_dir: str):
-    # map sha256 -> local path by recomputing sha; for 3k files it's fine.
-    from dataset_tool.hashutil import sha256_file
-    m = {}
-    for root, _, files in os.walk(src_dir):
-        for name in files:
-            p = os.path.join(root, name)
-            sha = sha256_file(p)
-            m[sha] = p
-    return m
 
 def main():
     ap = argparse.ArgumentParser()
@@ -35,11 +25,13 @@ def main():
     if missing:
         raise SystemExit(f"{len(missing)} entries missing locally; ensure --src matches manifest")
 
-    for e in tqdm(entries, desc="Uploading files"):
-        upload_file(sha_to_path[e["sha256"]], e)
+    bucket = SETTINGS.require_bucket()
+    s3 = s3_client()
 
-    upload_manifest(args.manifest)
-    print(f"Uploaded manifest to s3://{SETTINGS.bucket}/{SETTINGS.manifest_key}")
+    upload_entries(entries, sha_to_local=sha_to_path, s3=s3)
+
+    upload_manifest(args.manifest, s3=s3, bucket=bucket)
+    print(f"Uploaded manifest to s3://{bucket}/{SETTINGS.manifest_key}")
 
 if __name__ == "__main__":
     main()

@@ -22,4 +22,6 @@ dev-dependencies = [
 
 [tool.ruff]
 line-length = 100
-select = ["E","F","I","B"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]

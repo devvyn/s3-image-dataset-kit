@@ -17,9 +17,15 @@ class Settings:
     manifest_key: str = os.getenv("MANIFEST_KEY", "manifests/inventory-v1.jsonl")
     logical_map_csv: str | None = os.getenv("DATASET_LOGICAL_MAP") or None
 
-    def validate(self):
+    def require_bucket(self) -> str:
         if not self.bucket:
-            raise ValueError("S3_BUCKET is required")
+            raise ValueError("S3_BUCKET is required for S3 operations")
+        return self.bucket
+
+    def validate(self, *, require_bucket: bool = True):
+        if require_bucket:
+            self.require_bucket()
         return self
 
-SETTINGS = Settings().validate()
+
+SETTINGS = Settings()

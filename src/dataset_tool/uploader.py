@@ -4,7 +4,7 @@ from __future__ import annotations
 import mimetypes
 import os
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Any, Iterable, Mapping, Optional
 
 from tqdm import tqdm
 
@@ -13,9 +13,11 @@ try:
 except Exception:
     Image = None  # width/height omitted if Pillow missing
 
+from botocore.exceptions import ClientError
+
 from .config import SETTINGS
 from .hashutil import sha256_file
-from .manifest import ManifestEntry, write_jsonl
+from .manifest import ManifestEntry, to_manifest_entry, write_jsonl
 from .s3_client import s3_client
 
 
@@ -43,9 +45,9 @@ def _maybe_dims(path: str) -> tuple[Optional[int], Optional[int]]:
     except Exception:
         return None, None
 
-def build_manifest(src_dir: str, logical_map: dict[str, str] | None = None):
+def build_manifest(src_dir: str, logical_map: dict[str, str] | None = None) -> list[ManifestEntry]:
     entries: list[ManifestEntry] = []
-    for path in tqdm(list(iter_images(src_dir)), desc="Hashing"):
+    for path in tqdm(iter_images(src_dir), desc="Hashing"):
         sha = sha256_file(path)
         ext = os.path.splitext(path)[1].lower()
         if ext == ".jpeg":
@@ -59,49 +61,97 @@ def build_manifest(src_dir: str, logical_map: dict[str, str] | None = None):
             fname = os.path.basename(path)
             logical_id = logical_map.get(fname) or logical_map.get(path)
         entries.append(ManifestEntry(
-            sha256=sha, path=key, bytes=size, content_type=ctype,
-            width=w, height=h, logical_id=logical_id
+            sha256=sha,
+            path=key,
+            bytes=size,
+            content_type=ctype,
+            width=w,
+            height=h,
+            logical_id=logical_id,
         ))
     return entries
 
-def upload_entries(entries: list[ManifestEntry]):
-    s3 = s3_client()
-    for e in tqdm(entries, desc="Uploading"):
-        extra = {
-            "ContentType": e.content_type,
-            "CacheControl": "public, max-age=31536000, immutable"
-        }
-        # Only upload if absent (idempotent by hash)
-        try:
-            s3.head_object(Bucket=SETTINGS.bucket, Key=e.path)
-            continue
-        except Exception:
-            pass
-        # Upload from local file derived from sha (not stored here; caller supplies)
-        # We need a mapping sha -> local path; simplest approach is to re-derive it during upload.
-        # For this toolkit, we assume the uploader runs right after build_manifest so we can locate files by sha.
-        raise RuntimeError("upload_entries requires upload_dataset script which maps sha->source path.")
+def build_sha_to_local_map(src_dir: str) -> dict[str, str]:
+    """Compute a mapping of SHA256 hash → local file path with a progress indicator."""
 
-def upload_file(local_path: str, entry: ManifestEntry):
-    s3 = s3_client()
-    with open(local_path, "rb") as f:
-        s3.put_object(
-            Bucket=SETTINGS.bucket,
-            Key=entry.path,
-            Body=f,
-            ContentType=entry.content_type,
-            CacheControl="public, max-age=31536000, immutable"
-        )
+    mapping: dict[str, str] = {}
+    for path in tqdm(iter_images(src_dir), desc="Indexing local files"):
+        sha = sha256_file(path)
+        mapping.setdefault(sha, path)
+    return mapping
+
+
+def upload_entries(
+    entries: Iterable[ManifestEntry | Mapping[str, Any]],
+    *,
+    src_dir: str | None = None,
+    sha_to_local: Mapping[str, str] | None = None,
+    s3=None,
+):
+    """Upload manifest entries using a local SHA→path mapping.
+
+    Provide either ``src_dir`` (to derive a mapping) or ``sha_to_local``.
+    Objects already present in the bucket are skipped. Supply an existing
+    ``s3`` client to reuse connections across uploads.
+    """
+
+    bucket = SETTINGS.require_bucket()
+
+    if sha_to_local is None:
+        if not src_dir:
+            raise ValueError("upload_entries requires src_dir or sha_to_local mapping")
+        sha_to_local = build_sha_to_local_map(src_dir)
+
+    s3 = s3 or s3_client()
+
+    for record in tqdm(entries, desc="Uploading"):
+        entry = to_manifest_entry(record)
+        local_path = sha_to_local.get(entry.sha256)
+        if not local_path:
+            raise FileNotFoundError(
+                f"Local file for SHA {entry.sha256} not found; ensure source matches manifest"
+            )
+
+        try:
+            s3.head_object(Bucket=bucket, Key=entry.path)
+        except ClientError as exc:
+            error = exc.response.get("Error", {})
+            if error.get("Code") not in {"404", "NoSuchKey", "NotFound"}:
+                raise
+        else:
+            continue
+
+        upload_file(local_path, entry, bucket=bucket, s3=s3)
+
+def upload_file(
+    local_path: str,
+    entry: ManifestEntry,
+    *,
+    bucket: str | None = None,
+    s3=None,
+):
+    if bucket is None:
+        bucket = SETTINGS.require_bucket()
+    if s3 is None:
+        s3 = s3_client()
+    extra = {
+        "ContentType": entry.content_type,
+        "CacheControl": "public, max-age=31536000, immutable",
+    }
+    s3.upload_file(local_path, bucket, entry.path, ExtraArgs=extra)
 
 def write_manifest(entries: list[ManifestEntry], out_path: str):
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     write_jsonl(entries, out_path)
 
-def upload_manifest(local_manifest_path: str):
-    s3 = s3_client()
+def upload_manifest(local_manifest_path: str, *, s3=None, bucket: str | None = None):
+    if bucket is None:
+        bucket = SETTINGS.require_bucket()
+    if s3 is None:
+        s3 = s3_client()
     with open(local_manifest_path, "rb") as f:
         s3.put_object(
-            Bucket=SETTINGS.bucket,
+            Bucket=bucket,
             Key=SETTINGS.manifest_key,
             Body=f,
             ContentType="application/json",
