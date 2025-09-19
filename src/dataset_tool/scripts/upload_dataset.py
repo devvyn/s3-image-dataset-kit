@@ -1,15 +1,16 @@
-
 from __future__ import annotations
 
 import argparse
 
 from dataset_tool.config import SETTINGS
 from dataset_tool.manifest import read_jsonl, to_manifest_entry
+from dataset_tool.s3_client import s3_client
 from dataset_tool.uploader import (
     build_sha_to_local_map,
     upload_entries,
     upload_manifest,
 )
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -25,10 +26,12 @@ def main():
     if missing:
         raise SystemExit(f"{len(missing)} entries missing locally; ensure --src matches manifest")
 
-    upload_entries(entries, sha_to_local=sha_to_path)
-
-    upload_manifest(args.manifest)
     bucket = SETTINGS.require_bucket()
+    s3 = s3_client()
+
+    upload_entries(entries, sha_to_local=sha_to_path, s3=s3)
+
+    upload_manifest(args.manifest, s3=s3, bucket=bucket)
     print(f"Uploaded manifest to s3://{bucket}/{SETTINGS.manifest_key}")
 
 if __name__ == "__main__":

@@ -13,6 +13,8 @@ try:
 except Exception:
     Image = None  # width/height omitted if Pillow missing
 
+from botocore.exceptions import ClientError
+
 from .config import SETTINGS
 from .hashutil import sha256_file
 from .manifest import ManifestEntry, to_manifest_entry, write_jsonl
@@ -43,7 +45,7 @@ def _maybe_dims(path: str) -> tuple[Optional[int], Optional[int]]:
     except Exception:
         return None, None
 
-def build_manifest(src_dir: str, logical_map: dict[str, str] | None = None):
+def build_manifest(src_dir: str, logical_map: dict[str, str] | None = None) -> list[ManifestEntry]:
     entries: list[ManifestEntry] = []
     for path in tqdm(iter_images(src_dir), desc="Hashing"):
         sha = sha256_file(path)
@@ -70,12 +72,12 @@ def build_manifest(src_dir: str, logical_map: dict[str, str] | None = None):
     return entries
 
 def build_sha_to_local_map(src_dir: str) -> dict[str, str]:
-    """Compute a mapping of SHA256 hash → local file path."""
+    """Compute a mapping of SHA256 hash → local file path with a progress indicator."""
 
     mapping: dict[str, str] = {}
-    for path in iter_images(src_dir):
+    for path in tqdm(iter_images(src_dir), desc="Indexing local files"):
         sha = sha256_file(path)
-        mapping[sha] = path
+        mapping.setdefault(sha, path)
     return mapping
 
 
@@ -84,20 +86,24 @@ def upload_entries(
     *,
     src_dir: str | None = None,
     sha_to_local: Mapping[str, str] | None = None,
+    s3=None,
 ):
     """Upload manifest entries using a local SHA→path mapping.
 
     Provide either ``src_dir`` (to derive a mapping) or ``sha_to_local``.
-    Objects already present in the bucket are skipped.
+    Objects already present in the bucket are skipped. Supply an existing
+    ``s3`` client to reuse connections across uploads.
     """
+
+    bucket = SETTINGS.require_bucket()
+
 
     if sha_to_local is None:
         if not src_dir:
             raise ValueError("upload_entries requires src_dir or sha_to_local mapping")
         sha_to_local = build_sha_to_local_map(src_dir)
 
-    bucket = SETTINGS.require_bucket()
-    s3 = s3_client()
+    s3 = s3 or s3_client()
 
     for record in tqdm(entries, desc="Uploading"):
         entry = to_manifest_entry(record)
@@ -109,32 +115,41 @@ def upload_entries(
 
         try:
             s3.head_object(Bucket=bucket, Key=entry.path)
+        except ClientError as exc:
+            error = exc.response.get("Error", {})
+            if error.get("Code") not in {"404", "NoSuchKey", "NotFound"}:
+                raise
+        else:
             continue
-        except Exception:
-            pass
 
-        upload_file(local_path, entry, bucket=bucket)
+        upload_file(local_path, entry, bucket=bucket, s3=s3)
 
-def upload_file(local_path: str, entry: ManifestEntry, *, bucket: str | None = None):
+def upload_file(
+    local_path: str,
+    entry: ManifestEntry,
+    *,
+    bucket: str | None = None,
+    s3=None,
+):
     if bucket is None:
         bucket = SETTINGS.require_bucket()
-    s3 = s3_client()
-    with open(local_path, "rb") as f:
-        s3.put_object(
-            Bucket=bucket,
-            Key=entry.path,
-            Body=f,
-            ContentType=entry.content_type,
-            CacheControl="public, max-age=31536000, immutable"
-        )
+    if s3 is None:
+        s3 = s3_client()
+    extra = {
+        "ContentType": entry.content_type,
+        "CacheControl": "public, max-age=31536000, immutable",
+    }
+    s3.upload_file(local_path, bucket, entry.path, ExtraArgs=extra)
 
 def write_manifest(entries: list[ManifestEntry], out_path: str):
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     write_jsonl(entries, out_path)
 
-def upload_manifest(local_manifest_path: str):
-    bucket = SETTINGS.require_bucket()
-    s3 = s3_client()
+def upload_manifest(local_manifest_path: str, *, s3=None, bucket: str | None = None):
+    if bucket is None:
+        bucket = SETTINGS.require_bucket()
+    if s3 is None:
+        s3 = s3_client()
     with open(local_manifest_path, "rb") as f:
         s3.put_object(
             Bucket=bucket,
