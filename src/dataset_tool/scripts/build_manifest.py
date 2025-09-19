@@ -23,7 +23,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", required=True, help="Source directory of images")
     ap.add_argument("--out", required=True, help="Output manifest path")
-    ap.add_argument("--logical-map", default=SETTINGS.logical_map_csv, help="CSV mapping filename->logical_id")
+    ap.add_argument(
+        "--logical-map",
+        default=SETTINGS.logical_map_csv,
+        help="CSV mapping filename->logical_id",
+    )
     args = ap.parse_args()
 
     logical_map = load_logical_map(args.logical_map)

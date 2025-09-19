@@ -43,7 +43,7 @@ Assuming your local images are under `./data/images`:
 # Dry-run manifest (no uploads) – write to ./manifests/inventory-v1.jsonl
 just manifest ./data/images
 
-# Upload to S3 (idempotent by hash)
+# Upload to S3 (idempotent by hash, manifest gains S3 ETags)
 just upload ./data/images
 ```
 
@@ -90,7 +90,11 @@ You do **not** bake images into the container. This image only contains the clie
 docker build -t dataset-client .
 
 # Run demo (needs env for S3 + manifest access, and a cache volume)
-docker run --rm -it   --env-file .env   -v /tmp/imgcache:/tmp/imgcache   dataset-client   python -m dataset_tool.scripts.random_fetch --n 3
+docker run --rm -it \
+  --env-file .env \
+  -v /tmp/imgcache:/tmp/imgcache \
+  dataset-client \
+  python -m dataset_tool.scripts.random_fetch --n 3
 ```
 
 ## Just Recipes
