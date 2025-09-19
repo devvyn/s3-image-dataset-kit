@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 
 from dataset_tool.config import SETTINGS
-from dataset_tool.manifest import read_jsonl
+from dataset_tool.manifest import read_jsonl, to_manifest_entry
 from dataset_tool.s3_client import s3_client
 from dataset_tool.uploader import (
     build_sha_to_local_map,
