@@ -62,3 +62,27 @@ def test_upload_entries_uploads_and_sets_etag(tmp_path: Path, monkeypatch, _stub
 
     assert fake_s3.put_object.call_count == 1
     assert result[0].etag == '"uploaded"'
+
+
+def test_upload_entries_reuses_injected_s3(tmp_path: Path, monkeypatch, _stub_bucket):
+    sha = "c" * 64
+    entry = ManifestEntry(
+        sha256=sha,
+        path=uploader._object_key_from_sha(sha, ".png"),
+        bytes=5,
+    )
+    local_map = {sha: _touch_file(tmp_path / "image3.png", b"abcde")}
+
+    fake_s3 = Mock()
+    fake_s3.head_object.side_effect = ClientError({"Error": {"Code": "404"}}, "HeadObject")
+    fake_s3.put_object.return_value = {"ETag": '"etag"'}
+
+    def _fail():
+        raise AssertionError("unexpected s3_client() call")
+
+    monkeypatch.setattr(uploader, "s3_client", _fail)
+
+    result = uploader.upload_entries([entry], sha_to_local=local_map, s3=fake_s3)
+
+    fake_s3.put_object.assert_called_once()
+    assert result[0].etag == '"etag"'

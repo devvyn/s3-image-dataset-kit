@@ -127,24 +127,31 @@ def upload_entries(
             uploaded.append(entry)
             continue
 
-        etag = upload_file(local_path, entry, bucket=bucket)
+        etag = upload_file(local_path, entry, bucket=bucket, s3=s3)
         if etag:
             entry.etag = etag
         uploaded.append(entry)
 
     return uploaded
 
-def upload_file(local_path: str, entry: ManifestEntry, *, bucket: str | None = None) -> str | None:
+def upload_file(
+    local_path: str,
+    entry: ManifestEntry,
+    *,
+    bucket: str | None = None,
+    s3: Any | None = None,
+) -> str | None:
     if bucket is None:
         bucket = SETTINGS.require_bucket()
-    s3 = s3_client()
+    if s3 is None:
+        s3 = s3_client()
     with open(local_path, "rb") as f:
         response = s3.put_object(
             Bucket=bucket,
             Key=entry.path,
             Body=f,
             ContentType=entry.content_type,
-            CacheControl="public, max-age=31536000, immutable"
+            CacheControl="public, max-age=31536000, immutable",
         )
     return response.get("ETag")
 
